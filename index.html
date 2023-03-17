@@ -1,1 +1,174 @@
-<b>Hello <u>Jules</u></b>
+<a id="getChromeDiv" style="display: none" href="https://www.google.com/chrome/" id="chromeOnly"
+	>Get Chrome, it is the only browser that supports serial communcation and was used for testing (Edge and browsers
+	based on Chrome might work too, but your current browser will not).</a
+>
+<div id="requestPortDiv" style="display: none">
+	Connect USB cable to FAST Nueron controller, then
+	<a href="#" onclick="javascript:location.reload()">click here to retry</a> or if your first time
+	<a href="#" onclick="requestPort()">click here to select port</a>.
+</div>
+
+<div id="mainDiv" style="display: none">
+	<p><b>Connected:</b> <a href="#" onclick="requestPort()">click here to select a different port.</a></p>
+	<div>
+		<b>Optional:</b> Enter switch IDs and names below for a better experience.<br />
+		Data is saved in browser storage so should persist if you come back to this page later (but copy/paste to save
+		elsewhere to be extra safe).<br />
+		If you don't know the switch ID, toggle the switch and get the switch ID from the change log, then enter it
+		here.<br />
+		Required Syntax:<br />
+		1 My Switch with ID of 1<br />
+		8 My Switch with ID of 8<br />
+		982 My Switch with ID of 982<br />
+		400 whatever name I want goes here<br />
+		<br />
+	</div>
+	<textarea style="width: 100%; height: 200px" oninput="handleTextChange()" id="textarea"></textarea>
+	<div style="margin-top: 30px">
+		Switch Change Log:
+		<div id="events" style="border: solid 1px black; min-height: 50px"></div>
+	</div>
+	<div style="margin-top: 30px">
+		Communication Log:
+		<div id="log" style="border: solid 1px black; min-height: 50px"></div>
+	</div>
+</div>
+
+<script>
+	const usbVendorId = 11914;
+	const usbProductId = 4155;
+	const hardwareModel = 8192;
+	const requestPortDiv = document.getElementById('requestPortDiv');
+	const getChromeDiv = document.getElementById('getChromeDiv');
+	const mainDiv = document.getElementById('mainDiv');
+	const textarea = document.getElementById('textarea');
+	const events = document.getElementById('events');
+	const log = document.getElementById('log');
+	textarea.value = localStorage.getItem('text');
+
+	const addLog = (message) => (log.innerText += message + '\r');
+	const addEvent = (message) => (events.innerText += message + '\r');
+
+	const handleTextChange = () => {
+		localStorage.setItem('text', textarea.value);
+	};
+
+	const requestPort = async () => {
+		// Forget all ports first so that we only have one port to deal with.
+		const ports = await navigator.serial.getPorts();
+		for (const port of ports) {
+			await port.forget();
+		}
+
+		navigator.serial
+			.requestPort({ filters: [{ usbVendorId, usbProductId }] })
+			.then(() => location.reload())
+			.catch((error) => alert(error));
+	};
+
+	if (!'serial' in navigator) {
+		getChromeDiv.style.display = 'block';
+	} else {
+		(async () => {
+			const ports = await navigator.serial.getPorts();
+			if (ports.length !== 1) {
+				requestPortDiv.style.display = 'block';
+				return;
+			}
+			mainDiv.style.display = 'block';
+
+			const port = ports[0];
+
+			await port.open({ baudRate: 921600 });
+
+			const writer = port.writable.getWriter();
+
+			// Zero padding and uppercase doesn't seem to be needed,
+			//  but it makes things match the docs and maybe easier to read in logs.
+			const toHex = (number) => {
+				const hex = number.toString(16).toUpperCase();
+				if (hex.length % 2) {
+					return '0' + hex;
+				}
+				return hex;
+			};
+
+			const writeLine = async (args) => {
+				const { text } = args;
+				addLog('wrote: ' + text);
+				await writer.write(new TextEncoder().encode(text + '\r'));
+			};
+
+			const writeCommand = async (command, ...args) => {
+				const filterUndefined = (array) => {
+					return array.filter((item) => item !== undefined);
+				};
+
+				const text = `${command}:${filterUndefined(args)
+					.map((arg) => toHex(arg))
+					.join(',')}`;
+				await writeLine({ text });
+			};
+
+			const clear = async () => {
+				await writeLine({ text: Array(2048).fill(' ').join('') });
+			};
+
+			const configureHardware = async () => {
+				await writeCommand('CH', hardwareModel, 1);
+			};
+
+			let received = '';
+			port.readable.pipeTo(
+				new WritableStream({
+					write: (chunk) => {
+						const lines = (received + new TextDecoder().decode(chunk)).split('\r');
+						lines.forEach((line, index) => {
+							// The last part doesn't end with \r so we just save it for now.  We will process it after we get the ending \r
+							if (index === lines.length - 1) {
+								received = line;
+							} else {
+								addLog('read: ' + line);
+								if (line.startsWith('/L:') || line.startsWith('-L:')) {
+									const closed = line[0] === '-';
+									const switchId = parseInt(line.substring('/L:'.length), 16);
+									const switchInfo = (() => {
+										try {
+											return textarea.value
+												.replace(/\r\n/g, '\r')
+												.replace(/\n/g, '\r')
+												.split('\r')
+												.map((text) => {
+													const parts = text.split(' ');
+													const id = parts[0];
+													const name = parts.slice(1).join(' ');
+													return { id, name };
+												});
+										} catch {
+											addEvent('invalid syntax for switch IDs and names');
+										}
+									})();
+									const info = switchInfo?.find((aSwitch) => aSwitch.id === switchId.toString());
+									const message = `${info ? info.name : `switch id ${switchId}`} ${
+										closed ? 'closed' : 'open'
+									}`;
+									try {
+										// This doesn't seem to work unless it is in response to a user gesture, but maybe you can
+										//  toggle some security feature in your browser and get a spoken message when switches are hit.
+										window.speechSynthesis.speak(new SpeechSynthesisUtterance(message));
+									} catch {
+										// sorry, speach doesn't work for you, but you can read the log
+									}
+									addEvent(message);
+								}
+							}
+						});
+					},
+				})
+			);
+
+			await clear();
+			await configureHardware();
+		})();
+	}
+</script>

@@ -157,6 +157,7 @@
 										//  toggle some security feature in your browser and get a spoken message when switches are hit.
 										const utter = new SpeechSynthesisUtterance(message);
 										utter.rate = 5;
+										window.speechSynthesis.cancel();
 										window.speechSynthesis.speak(utter);
 									} catch {
 										// sorry, speach doesn't work for you, but you can read the log

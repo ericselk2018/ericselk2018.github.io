@@ -155,7 +155,9 @@
 									try {
 										// This doesn't seem to work unless it is in response to a user gesture, but maybe you can
 										//  toggle some security feature in your browser and get a spoken message when switches are hit.
-										window.speechSynthesis.speak(new SpeechSynthesisUtterance(message));
+										const utter = new SpeechSynthesisUtterance(message);
+										utter.rate = 2;
+										window.speechSynthesis.speak(utter);
 									} catch {
 										// sorry, speach doesn't work for you, but you can read the log
 									}

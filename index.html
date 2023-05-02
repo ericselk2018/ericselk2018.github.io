@@ -152,7 +152,6 @@
 			const trigger = 0b1001001; // enabled, one-shot, manual
 			const driverMode = 0x10; // pulse
 			const neuron = hardware.value === 'Neuron';
-			console.log('findme', hardware.value);
 			return formatCommand(
 				neuron ? 'DL' : 'DN',
 				coilId,
@@ -206,7 +205,11 @@
 				};
 
 				const configureHardware = async () => {
-					await writeCommand('CH', hardwareModel, 1);
+					// Nano doesn't use the CH command.
+					const neuron = hardware.value === 'Neuron';
+					if (neuron) {
+						await writeCommand('CH', hardwareModel, 1);
+					}
 				};
 
 				tapCoil = async (args) => {

@@ -2,10 +2,45 @@
 	>Get Chrome, it is the only browser that supports serial communcation and was used for testing (Edge and browsers
 	based on Chrome might work too, but your current browser will not).</a
 >
+<select id="hardware" onchange="init();updateTapCoilCommand();">
+	<option>Neuron</option>
+	<option>Nano</option>
+</select>
 <div id="requestPortDiv" style="display: none">
-	Connect USB cable to FAST Nueron controller, then
+	Connect USB cable to FAST controller, then
 	<a href="#" onclick="javascript:location.reload()">click here to retry</a> or if your first time
 	<a href="#" onclick="requestPort()">click here to select port</a>.
+</div>
+
+<div>
+	<br />
+	<b>Warning:</b> Use this section with care, it will trigger coils to fire, use at your own risk.<br />
+	<table>
+		<tr>
+			<td>Coil ID (0 to 255)</td>
+			<td>Pulse Time (milliseconds 1 to 255)</td>
+			<td>Pulse Power % (1 to 100)</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>
+				<input id="coilId" oninput="updateTapCoilCommand()" />
+			</td>
+			<td>
+				<input id="coilMs" oninput="updateTapCoilCommand()" />
+			</td>
+			<td>
+				<input id="coilPercent" oninput="updateTapCoilCommand()" />
+			</td>
+			<td>
+				<button onclick="handleTapCoilClick()">Pulse Coil</button>
+			</td>
+		</tr>
+	</table>
+	<div>
+		This command will be sent to pulse coil:<br />
+		<div id="tapCoilCommand"></div>
+	</div>
 </div>
 
 <div id="mainDiv" style="display: none">
@@ -17,24 +52,21 @@
 		If you don't know the switch ID, toggle the switch and get the switch ID from the change log, then enter it
 		here.<br />
 		Required Syntax:<br />
-		1 My Switch with ID of 1<br />
+		1 Left Inlane Rollover<br />
 		8 My Switch with ID of 8<br />
 		982 My Switch with ID of 982<br />
 		400 whatever name I want goes here<br />
 		<br />
 	</div>
 	<textarea style="width: 100%; height: 200px" oninput="handleTextChange()" id="textarea"></textarea>
-	<div>
-		<b>Warning:</b> Use this section with care, it will trigger coils to fire, use at your own risk.<br />
-		Coil ID:<br /><input id="coilId" /><button onclick="handleTapCoilClick()">Tap Coil</button>
-		<div style="margin-top: 30px">
-			Switch Change Log:
-			<div id="events" style="border: solid 1px black; min-height: 50px"></div>
-		</div>
-		<div style="margin-top: 30px">
-			Communication Log:
-			<div id="log" style="border: solid 1px black; min-height: 50px"></div>
-		</div>
+
+	<div style="margin-top: 30px">
+		Switch Change Log:
+		<div id="events" style="border: solid 1px black; min-height: 50px"></div>
+	</div>
+	<div style="margin-top: 30px">
+		Communication Log:
+		<div id="log" style="border: solid 1px black; min-height: 50px"></div>
 	</div>
 
 	<script>
@@ -47,7 +79,12 @@
 		const textarea = document.getElementById('textarea');
 		const events = document.getElementById('events');
 		const coilIdInput = document.getElementById('coilId');
+		const coilMsInput = document.getElementById('coilMs');
+		const coilPercentInput = document.getElementById('coilPercent');
 		const log = document.getElementById('log');
+		const hardware = document.getElementById('hardware');
+		const tapCoilCommand = document.getElementById('tapCoilCommand');
+		hardware.value = localStorage.getItem('hardware') || 'Neuron';
 		textarea.value = localStorage.getItem('text');
 
 		const addLog = (message) => (log.innerText += message + '\r');
@@ -58,10 +95,7 @@
 		};
 
 		const handleTapCoilClick = () => {
-			const coilId = parseInt(coilIdInput.value);
-			if (!isNaN(coilId) && coilId >= 0 && coilId <= 255) {
-				tapCoil({ coilId });
-			}
+			tapCoil();
 		};
 
 		const requestPort = async () => {
@@ -77,10 +111,72 @@
 				.catch((error) => alert(error));
 		};
 
+		// Zero padding and uppercase doesn't seem to be needed,
+		//  but it makes things match the docs and maybe easier to read in logs.
+		const toHex = (number) => {
+			const hex = number.toString(16).toUpperCase();
+			if (hex.length % 2) {
+				return '0' + hex;
+			}
+			return hex;
+		};
+
+		const formatCommand = (command, ...args) => {
+			const filterUndefined = (array) => {
+				return array.filter((item) => item !== undefined);
+			};
+
+			return `${command}:${filterUndefined(args)
+				.map((arg) => toHex(arg))
+				.join(',')}`;
+		};
+
+		const clamp = ({ value, min, max }) => Math.max(Math.min(value, max), min);
+
+		const percentToByteValue = (value) => Math.round(clamp({ value, min: 0, max: 1 }) * 255);
+
+		createTapCoilCommand = () => {
+			const coilId = parseInt(coilIdInput.value);
+			if (isNaN(coilId) || coilId < 0 || coilId > 255) {
+				return '-invalid coil ID';
+			}
+			const ms = parseInt(coilMsInput.value);
+			if (isNaN(ms) || ms <= 0 || ms > 255) {
+				return '-milliseconds must be between 1 and 255';
+			}
+			const percent = parseInt(coilPercentInput.value);
+			if (isNaN(percent) || percent <= 0 || percent > 100) {
+				return '-percent must be greater than 0 and less than or equal to 100';
+			}
+
+			const trigger = 0b1001001; // enabled, one-shot, manual
+			const driverMode = 0x10; // pulse
+			const neuron = hardware.value === 'Neuron';
+			console.log('findme', hardware.value);
+			return formatCommand(
+				neuron ? 'DL' : 'DN',
+				coilId,
+				trigger,
+				0,
+				driverMode,
+				ms,
+				percentToByteValue(percent / 100),
+				0,
+				0,
+				0
+			);
+		};
+
+		updateTapCoilCommand = () => {
+			tapCoilCommand.innerText = createTapCoilCommand();
+		};
+
 		if (!'serial' in navigator) {
 			getChromeDiv.style.display = 'block';
 		} else {
-			(async () => {
+			init = async () => {
+				localStorage.setItem('hardware', hardware.value);
+
 				const ports = await navigator.serial.getPorts();
 				if (ports.length !== 1) {
 					requestPortDiv.style.display = 'block';
@@ -94,16 +190,6 @@
 
 				const writer = port.writable.getWriter();
 
-				// Zero padding and uppercase doesn't seem to be needed,
-				//  but it makes things match the docs and maybe easier to read in logs.
-				const toHex = (number) => {
-					const hex = number.toString(16).toUpperCase();
-					if (hex.length % 2) {
-						return '0' + hex;
-					}
-					return hex;
-				};
-
 				const writeLine = async (args) => {
 					const { text } = args;
 					addLog('wrote: ' + text);
@@ -111,13 +197,7 @@
 				};
 
 				const writeCommand = async (command, ...args) => {
-					const filterUndefined = (array) => {
-						return array.filter((item) => item !== undefined);
-					};
-
-					const text = `${command}:${filterUndefined(args)
-						.map((arg) => toHex(arg))
-						.join(',')}`;
+					const text = formatCommand(command, args);
 					await writeLine({ text });
 				};
 
@@ -130,10 +210,12 @@
 				};
 
 				tapCoil = async (args) => {
-					const { coilId } = args;
-					const trigger = 0b1001001; // enabled, one-shot, manual
+					const command = createTapCoilCommand();
+					if (command.startsWith('-')) {
+						return;
+					}
 					await writeCommand('WD', 500);
-					await writeCommand('DL', coilId, trigger, 0, 0x10, 150, 30, 0, 0, 0);
+					await writeLine(command);
 				};
 
 				let received = '';
@@ -190,7 +272,8 @@
 
 				await clear();
 				await configureHardware();
-			})();
+			};
+			init();
 		}
 	</script>
 </div>

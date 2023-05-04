@@ -15,11 +15,17 @@
 <div>
 	<br />
 	<b>Warning:</b> Use this section with care, it will trigger coils to fire, use at your own risk.<br />
+	<label
+		><input type="checkbox" id="acceptHoldWarning" oninput="updateTapCoilCommand()" />I understand hold power %
+		should only be used with coils designed to be powered for long periods of times. Using on normal coils will
+		cause a fire.</label
+	>
 	<table>
 		<tr>
-			<td>Coil ID (0 to 255)</td>
-			<td>Pulse Time (milliseconds 1 to 255)</td>
-			<td>Pulse Power % (1 to 100)</td>
+			<td>Coil ID<br />(0 to 255)</td>
+			<td>Pulse Time<br />(milliseconds 1 to 255)</td>
+			<td>Pulse Power %<br />(1 to 100)</td>
+			<td>Hold Power %<br />(optional - 1 to 100)</td>
 			<td>&nbsp;</td>
 		</tr>
 		<tr>
@@ -33,7 +39,10 @@
 				<input id="coilPercent" oninput="updateTapCoilCommand()" />
 			</td>
 			<td>
-				<button onclick="handleTapCoilClick()">Pulse Coil</button>
+				<input id="coilHoldPercent" oninput="updateTapCoilCommand()" />
+			</td>
+			<td>
+				<button id="pulseCoilButton" onclick="handleTapCoilClick()">Pulse Coil</button>
 			</td>
 		</tr>
 	</table>
@@ -81,9 +90,12 @@
 		const coilIdInput = document.getElementById('coilId');
 		const coilMsInput = document.getElementById('coilMs');
 		const coilPercentInput = document.getElementById('coilPercent');
+		const coilHoldPercentInput = document.getElementById('coilHoldPercent');
+		const pulseCoilButton = document.getElementById('pulseCoilButton');
 		const log = document.getElementById('log');
 		const hardware = document.getElementById('hardware');
 		const tapCoilCommand = document.getElementById('tapCoilCommand');
+		const acceptHoldWarningCheck = document.getElementById('acceptHoldWarning');
 		hardware.value = localStorage.getItem('hardware') || 'Neuron';
 		textarea.value = localStorage.getItem('text');
 
@@ -136,6 +148,9 @@
 		const percentToByteValue = (value) => Math.round(clamp({ value, min: 0, max: 1 }) * 255);
 
 		createTapCoilCommand = () => {
+			const hold = !!coilHoldPercentInput.value;
+			pulseCoilButton.innerText = hold ? 'Pulse and Hold Coil' : 'Pulse Coil';
+
 			const coilId = parseInt(coilIdInput.value);
 			if (isNaN(coilId) || coilId < 0 || coilId > 255) {
 				return '-invalid coil ID';
@@ -148,9 +163,18 @@
 			if (isNaN(percent) || percent <= 0 || percent > 100) {
 				return '-percent must be greater than 0 and less than or equal to 100';
 			}
+			const holdPercent = parseInt(coilHoldPercentInput.value);
+			if (hold) {
+				if (isNaN(holdPercent) || holdPercent <= 0 || holdPercent > 100) {
+					return '-hold percent must be greater than 0 and less than or equal to 100';
+				}
+				if (!acceptHoldWarningCheck.checked) {
+					return '-must understand hold or you will cause a fire';
+				}
+			}
 
 			const trigger = 0b1001001; // enabled, one-shot, manual
-			const driverMode = 0x10; // pulse
+			const driverMode = hold ? 0x18 /* pulse and hold */ : 0x10; /* pulse */
 			const neuron = hardware.value === 'Neuron';
 			return formatCommand(
 				neuron ? 'DL' : 'DN',
@@ -160,7 +184,7 @@
 				driverMode,
 				ms,
 				percentToByteValue(percent / 100),
-				0,
+				hold ? percentToByteValue(holdPercent / 100) : 0,
 				0,
 				0
 			);
@@ -217,7 +241,8 @@
 					if (command.startsWith('-')) {
 						return;
 					}
-					await writeCommand('WD', 500);
+					const hold = !!coilHoldPercentInput.value;
+					await writeCommand('WD', hold ? 5000 : 500);
 					await writeLine(command);
 				};
 

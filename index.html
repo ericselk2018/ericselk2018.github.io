@@ -27,6 +27,7 @@
 			<td>Pulse Power %<br />(1 to 100)</td>
 			<td>Hold Power %<br />(optional - 1 to 100)</td>
 			<td>&nbsp;</td>
+			<td>&nbsp;</td>
 		</tr>
 		<tr>
 			<td>
@@ -44,11 +45,16 @@
 			<td>
 				<button id="pulseCoilButton" onclick="handleTapCoilClick()">Pulse Coil</button>
 			</td>
+			<td>
+				<button onclick="handleUnholdCoilClick()">Release Hold</button>
+			</td>
 		</tr>
 	</table>
 	<div>
 		This command will be sent to pulse coil:<br />
 		<div id="tapCoilCommand"></div>
+		This command will be sent to release coil hold:<br />
+		<div id="unholdCoilCommand"></div>
 	</div>
 </div>
 
@@ -95,6 +101,7 @@
 		const log = document.getElementById('log');
 		const hardware = document.getElementById('hardware');
 		const tapCoilCommand = document.getElementById('tapCoilCommand');
+		const unholdCoilCommand = document.getElementById('unholdCoilCommand');
 		const acceptHoldWarningCheck = document.getElementById('acceptHoldWarning');
 		hardware.value = localStorage.getItem('hardware') || 'Neuron';
 		textarea.value = localStorage.getItem('text');
@@ -104,6 +111,10 @@
 
 		const handleTextChange = () => {
 			localStorage.setItem('text', textarea.value);
+		};
+
+		const handleUnholdCoilClick = () => {
+			unholdCoil();
 		};
 
 		const handleTapCoilClick = () => {
@@ -190,8 +201,20 @@
 			);
 		};
 
+		createUnholdCoilCommand = () => {
+			const coilId = parseInt(coilIdInput.value);
+			if (isNaN(coilId) || coilId < 0 || coilId > 255) {
+				return '-invalid coil ID';
+			}
+
+			const trigger = 0b0; // disable
+			const neuron = hardware.value === 'Neuron';
+			return formatCommand(neuron ? 'DL' : 'DN', coilId, trigger, 0, 0, 0, 0, 0, 0, 0);
+		};
+
 		updateTapCoilCommand = () => {
 			tapCoilCommand.innerText = createTapCoilCommand();
+			unholdCoilCommand.innerText = createUnholdCoilCommand();
 		};
 
 		if (!'serial' in navigator) {
@@ -243,6 +266,15 @@
 					}
 					const hold = !!coilHoldPercentInput.value;
 					await writeCommand('WD', hold ? 5000 : 500);
+					await writeLine(command);
+				};
+
+				unholdCoil = async (args) => {
+					const command = createUnholdCoilCommand();
+					if (command.startsWith('-')) {
+						return;
+					}
+					await writeCommand('WD', 1);
 					await writeLine(command);
 				};
 

@@ -1,72 +1,237 @@
-<a id="getChromeDiv" style="display: none" href="https://www.google.com/chrome/" id="chromeOnly"
-	>Get Chrome, it is the only browser that supports serial communcation and was used for testing (Edge and browsers
-	based on Chrome might work too, but your current browser will not).</a
->
-<select id="hardware" onchange="init();updateTapCoilCommand();">
-	<option>Neuron</option>
-	<option>Nano</option>
-</select>
-<div id="requestPortDiv" style="display: none">
-	Connect USB cable to FAST controller, then
-	<a href="#" onclick="javascript:location.reload()">click here to retry</a> or if your first time
-	<a href="#" onclick="requestPort()">click here to select port</a>.
+<title>FAST Pinball Tester</title>
+<style>
+	body {
+		background-color: black;
+		color: white;
+		font-size: 30px;
+		font-family: sans-serif;
+	}
+	a {
+		color: white;
+		text-decoration: underline;
+		cursor: pointer;
+	}
+	p {
+		margin: 0;
+		padding: 0;
+		margin-bottom: 30px;
+	}
+	.view {
+		position: absolute;
+		left: 0;
+		right: 0;
+		top: 0;
+		bottom: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		text-align: center;
+		padding: 5%;
+	}
+	.box {
+		padding: 5%;
+		margin: 10%;
+		border: dotted 10px white;
+		border-radius: 20px;
+	}
+	button {
+		width: 200px;
+		padding: 20px;
+		font: inherit;
+		display: block;
+		margin: 20px auto;
+		border-radius: 20px;
+		font-weight: bold;
+	}
+	.tabs {
+		display: flex;
+		gap: 30px;
+		margin-bottom: 30px;
+	}
+	.tabs .active {
+		color: lime;
+	}
+	.eventsBox {
+		margin-top: 60px;
+		font-size: 20px;
+	}
+	.logBox {
+		margin-top: 60px;
+		font-size: 20px;
+	}
+	.log {
+		white-space: pre;
+		height: 200px;
+		overflow-x: auto;
+		overflow-y: scroll;
+		margin: 20px;
+		border: solid 1px white;
+		padding: 20px;
+		border-radius: 20px 0 0 20px;
+	}
+	.tip {
+		font-size: 20px;
+		padding: 0 5%;
+	}
+	.hint {
+		font-size: 16px;
+		padding: 0 5%;
+	}
+	textarea {
+		width: 100%;
+		height: 200px;
+	}
+	input, select {
+		font: inherit;
+		padding: 20px;
+		border-radius: 20px;
+		font-weight: bold;
+		width: 200px;
+	}
+	.boardTypeSelect {
+		width: unset;
+	}
+	table {
+		margin-top: 30px;
+	}
+</style>
+
+<div id="getChromeDiv" class="view" style="display: none">
+	<div class="box">
+		<a href="https://www.google.com/chrome/" id="chromeOnly">Get Chrome</a>, it is the only browser that supports
+		serial communcation and was used for testing (Edge and browsers based on Chrome might work too, but your current
+		browser will not).
+	</div>
 </div>
 
-<div>
-	<br />
-	<b>Warning:</b> Use this section with care, it will trigger coils to fire, use at your own risk.<br />
-	<table>
-		<tr>
-			<td>Coil ID (0 to 255)</td>
-			<td>Pulse Time (milliseconds 1 to 255)</td>
-			<td>Pulse Power % (1 to 100)</td>
-			<td>&nbsp;</td>
-		</tr>
-		<tr>
-			<td>
-				<input id="coilId" oninput="updateTapCoilCommand()" />
-			</td>
-			<td>
-				<input id="coilMs" oninput="updateTapCoilCommand()" />
-			</td>
-			<td>
-				<input id="coilPercent" oninput="updateTapCoilCommand()" />
-			</td>
-			<td>
-				<button onclick="handleTapCoilClick()">Pulse Coil</button>
-			</td>
-		</tr>
-	</table>
-	<div>
-		This command will be sent to pulse coil:<br />
-		<div id="tapCoilCommand"></div>
+<div id="selectHardwareDiv" class="view" style="display: none">
+	<div class="box">
+		<div>Which FAST hardware are you using?</div>
+		<button onclick="setHardware('Neuron')">Neuron</button>
+		<button onclick="setHardware('Nano')">Nano</button>
+	</div>
+</div>
+
+<div id="requestPortDiv" class="view" style="display: none">
+	<div class="box">
+		<p>
+			<span id="hardwareNameDiv"></span>
+			(<a tabindex="0" onclick="setHardware('')">change</a>)
+		</p>
+		Connect USB cable to FAST controller, then
+		<a tabindex="0" onclick="location.reload()">click here to retry</a> or if your first time
+		<a tabindex="0" onclick="requestPort()">click here to select port</a>.
 	</div>
 </div>
 
 <div id="mainDiv" style="display: none">
-	<p><b>Connected:</b> <a href="#" onclick="requestPort()">click here to select a different port.</a></p>
-	<div>
-		<b>Optional:</b> Enter switch IDs and names below for a better experience.<br />
-		Data is saved in browser storage so should persist if you come back to this page later (but copy/paste to save
-		elsewhere to be extra safe).<br />
-		If you don't know the switch ID, toggle the switch and get the switch ID from the change log, then enter it
-		here.<br />
-		Required Syntax:<br />
-		1 Left Inlane Rollover<br />
-		8 My Switch with ID of 8<br />
-		982 My Switch with ID of 982<br />
-		400 whatever name I want goes here<br />
-		<br />
+	<p>Connected to <span id="hardwareNameDiv2"></span> (<a tabindex="0" onclick="setHardware('')">change</a>)</p>
+	<div class="tabs">
+		<a id="switchesTab" tabindex="0" onclick="setView('switches')">Switches</a>
+		<a id="driversTab" tabindex="0" onclick="setView('drivers')">Drivers</a>
+		<a id="ledsTab" tabindex="0" onclick="setView('leds')">LEDs</a>
 	</div>
-	<textarea style="width: 100%; height: 200px" oninput="handleTextChange()" id="textarea"></textarea>
+	<div id="switchesDiv" style="display: none">
+		<div class="tip">
+			<b>Optional:</b> Enter switch IDs and names below for a better experience.<br />
+			<div class="hint">
+				Required Syntax:<br />
+				1 Left Inlane Rollover<br />
+				8 My Switch with ID of 8<br />
+				982 My Switch with ID of 982<br />
+				400 whatever name I want goes here<br />
+			</div>
+			<br />
+			<textarea oninput="handleTextChange()" id="textarea"></textarea>
+		</div>
 
-	<div style="margin-top: 30px">
-		Switch Change Log:
-		<div id="events" style="border: solid 1px black; min-height: 50px"></div>
+		<div class="eventsBox">
+			<div>Switch Change Log:</div>
+			<div id="events" class="log"></div>
+		</div>
 	</div>
-	<div style="margin-top: 30px">
+	<div id="driversDiv" style="display: none">
+		<div class="tip">
+			<b>Warning:</b> Use this section with care, it will trigger coils to fire, use at your own risk.<br />
+			<table>
+				<tr>
+					<td>Coil ID<br />(0 to 255)</td>
+					<td>Pulse Time<br />(milliseconds 1 to 255)</td>
+					<td>Pulse Power %<br />(1 to 100)</td>
+					<td>&nbsp;</td>
+				</tr>
+				<tr>
+					<td>
+						<input id="coilId" oninput="updateTapCoilCommand()" />
+					</td>
+					<td>
+						<input id="coilMs" oninput="updateTapCoilCommand()" />
+					</td>
+					<td>
+						<input id="coilPercent" oninput="updateTapCoilCommand()" />
+					</td>
+					<td>
+						<button onclick="handleTapCoilClick()">Pulse Coil</button>
+					</td>
+				</tr>
+			</table>
+			<div>
+				This command will be sent to pulse coil:<br />
+				<div id="tapCoilCommand"></div>
+			</div>
+		</div>
+	</div>
+	<div id="ledsDiv" style="display: none">
+		<div class="tip">
+			<b>Warning:</b> Use this section with care, it will trigger LEDs to light, use at your own risk.<br />
+			<p>
+				<div>Board Type</div>
+				<select id="boardTypeSelect" class="boardTypeSelect">
+					<option value="84">FP-EXP-0081 (256 LEDs, 0 Servos)</option>
+					<option value="B4">FP-EXP-0071 (156 LEDs, 4 Servos)</option>
+				</select>
+			</p>
+			<p>
+				<div>Board ID</div>
+				<select id="boardIdSelect">
+					<option>0</option>
+					<option>1</option>
+					<option>2</option>
+					<option>3</option>
+				</select>
+			</p>
+			<table>
+				<tr>
+					<td>Red %<br />(1 to 100)</td>
+					<td>Green %<br />(1 to 100)</td>
+					<td>Blue %<br />(1 to 100)</td>
+					<td>Fade Duration<br />(milliseconds)</td>
+					<td>&nbsp;</td>
+				</tr>
+				<tr>
+					<td>
+						<input id="redPercent" />
+					</td>
+					<td>
+						<input id="greenPercent" />
+					</td>
+					<td>
+						<input id="bluePercent" />
+					</td>
+					<td>
+						<input id="fadeDuration" />
+					</td>
+					<td>
+						<button onclick="handleLEDClick()">Update LED</button>
+					</td>
+				</tr>
+			</table>
+		</div>
+	</div>
+
+	<div class="logBox">
 		Communication Log:
-		<div id="log" style="border: solid 1px black; min-height: 50px"></div>
+		<div class="log" id="log"></div>
 	</div>
 
 	<script>
@@ -75,6 +240,9 @@
 		const hardwareModel = 8192;
 		const requestPortDiv = document.getElementById('requestPortDiv');
 		const getChromeDiv = document.getElementById('getChromeDiv');
+		const selectHardwareDiv = document.getElementById('selectHardwareDiv');
+		const hardwareNameDiv = document.getElementById('hardwareNameDiv');
+		const hardwareNameDiv2 = document.getElementById('hardwareNameDiv2');
 		const mainDiv = document.getElementById('mainDiv');
 		const textarea = document.getElementById('textarea');
 		const events = document.getElementById('events');
@@ -82,13 +250,17 @@
 		const coilMsInput = document.getElementById('coilMs');
 		const coilPercentInput = document.getElementById('coilPercent');
 		const log = document.getElementById('log');
-		const hardware = document.getElementById('hardware');
 		const tapCoilCommand = document.getElementById('tapCoilCommand');
-		hardware.value = localStorage.getItem('hardware') || 'Neuron';
+		const switchesDiv = document.getElementById('switchesDiv');
+		const switchesTab = document.getElementById('switchesTab');
+		const driversDiv = document.getElementById('driversDiv');
+		const driversTab = document.getElementById('driversTab');
+		const ledsDiv = document.getElementById('ledsDiv');
+		const ledsTab = document.getElementById('ledsTab');
 		textarea.value = localStorage.getItem('text');
 
-		const addLog = (message) => (log.innerText += message + '\r');
-		const addEvent = (message) => (events.innerText += message + '\r');
+		const addLog = (message) => (log.textContent += message + '\r\n');
+		const addEvent = (message) => (events.textContent += message + '\r\n');
 
 		const handleTextChange = () => {
 			localStorage.setItem('text', textarea.value);
@@ -97,6 +269,10 @@
 		const handleTapCoilClick = () => {
 			tapCoil();
 		};
+
+		const handleLEDClick = () => {
+			updateLED();
+		}
 
 		const requestPort = async () => {
 			// Forget all ports first so that we only have one port to deal with.
@@ -135,6 +311,17 @@
 
 		const percentToByteValue = (value) => Math.round(clamp({ value, min: 0, max: 1 }) * 255);
 
+		const setView = (value) => {
+			localStorage.setItem('view', value);
+			switchesDiv.style.display = value === 'switches' ? 'block' : 'none';
+			switchesTab.className = value === 'switches' ? 'active' : '';
+			driversDiv.style.display = value === 'drivers' ? 'block' : 'none';
+			driversTab.className = value === 'drivers' ? 'active' : '';
+			ledsDiv.style.display = value === 'leds' ? 'block' : 'none';
+			ledsTab.className = value === 'leds' ? 'active' : '';
+		};
+		setView(localStorage.getItem('view') || 'switches');
+
 		createTapCoilCommand = () => {
 			const coilId = parseInt(coilIdInput.value);
 			if (isNaN(coilId) || coilId < 0 || coilId > 255) {
@@ -151,7 +338,7 @@
 
 			const trigger = 0b1001001; // enabled, one-shot, manual
 			const driverMode = 0x10; // pulse
-			const neuron = hardware.value === 'Neuron';
+			const neuron = localStorage.getItem('hardware') === 'Neuron';
 			return formatCommand(
 				neuron ? 'DL' : 'DN',
 				coilId,
@@ -170,15 +357,27 @@
 			tapCoilCommand.innerText = createTapCoilCommand();
 		};
 
+		setHardware = async (value) => {
+			const ports = await navigator.serial.getPorts();
+			for (const port of ports) {
+				await port.forget();
+			}
+			localStorage.setItem('hardware', value);
+			location.reload();
+		};
+
 		if (!'serial' in navigator) {
-			getChromeDiv.style.display = 'block';
+			getChromeDiv.style.display = 'flex';
+		} else if (!localStorage.getItem('hardware')) {
+			selectHardwareDiv.style.display = 'flex';
 		} else {
 			init = async () => {
-				localStorage.setItem('hardware', hardware.value);
-
+				const hardware = localStorage.getItem('hardware');
+				hardwareNameDiv.innerText = hardware;
+				hardwareNameDiv2.innerText = hardware;
 				const ports = await navigator.serial.getPorts();
-				if (ports.length !== 1) {
-					requestPortDiv.style.display = 'block';
+				if (ports.length !== 0) {
+					requestPortDiv.style.display = 'flex';
 					return;
 				}
 				mainDiv.style.display = 'block';
@@ -212,7 +411,7 @@
 					}
 				};
 
-				tapCoil = async (args) => {
+				tapCoil = async () => {
 					const command = createTapCoilCommand();
 					if (command.startsWith('-')) {
 						return;
@@ -220,6 +419,10 @@
 					await writeCommand('WD', 500);
 					await writeLine(command);
 				};
+
+				updateLED = async() => {
+					//
+				}
 
 				let received = '';
 				port.readable.pipeTo(

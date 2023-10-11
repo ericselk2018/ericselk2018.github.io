@@ -266,7 +266,7 @@
 					}
 					const hold = !!coilHoldPercentInput.value;
 					await writeCommand('WD', hold ? 5000 : 500);
-					await writeLine(command);
+					await writeLine({ text: command });
 				};
 
 				unholdCoil = async (args) => {
@@ -275,7 +275,7 @@
 						return;
 					}
 					await writeCommand('WD', 1);
-					await writeLine(command);
+					await writeLine({ text: command });
 				};
 
 				let received = '';
